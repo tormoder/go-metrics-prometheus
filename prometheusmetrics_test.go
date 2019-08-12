@@ -148,3 +148,18 @@ func TestPrometheusHistogramGetUpdated(t *testing.T) {
 		t.Fatalf("Go-metrics value and prometheus metrics value for max do not match:\n+ %s\n- %s", serialized, expected)
 	}
 }
+
+func TestShouldOnlyAllowWhitelistedMetricIfWhitelistIsProvided(t *testing.T) {
+	prometheusRegistry := prometheus.NewRegistry()
+	metricsRegistry := metrics.NewRegistry()
+	pClient := NewPrometheusProvider(metricsRegistry, "test", "subsys", prometheusRegistry, 1*time.Second)
+	pClient.WithMetricsWhitelist(map[string]bool{"counter1": true})
+	metricsRegistry.Register("counter1", metrics.NewCounter())
+	metricsRegistry.Register("counter2", metrics.NewCounter())
+	go pClient.UpdatePrometheusMetrics()
+	time.Sleep(2 * time.Second)
+	metrics, _ := prometheusRegistry.Gather()
+	if len(metrics) != 1 {
+		t.Errorf("expected only one metric registered")
+	}
+}

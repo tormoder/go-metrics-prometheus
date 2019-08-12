@@ -2,6 +2,7 @@ package prometheusmetrics
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -10,21 +11,27 @@ import (
 )
 
 type PrometheusConfig struct {
-	namespace        string
-	registry         metrics.Registry
-	subsystem        string
-	promRegistry     prometheus.Registerer
-	flushInterval    time.Duration
-	gauges           map[string]prometheus.Gauge
-	customMetrics    map[string]*CustomCollector
+	namespace string
+	subsystem string
+
+	registry     metrics.Registry
+	promRegistry prometheus.Registerer
+
+	flushInterval time.Duration
+
+	metricsWhitelist map[string]bool
+
+	gauges        map[string]prometheus.Gauge
+	customMetrics map[string]*CustomCollector
+
 	histogramBuckets []float64
 	timerBuckets     []float64
 }
 
 func NewPrometheusProvider(r metrics.Registry, namespace string, subsystem string, promRegistry prometheus.Registerer, flushInterval time.Duration) *PrometheusConfig {
 	return &PrometheusConfig{
-		namespace:        namespace,
-		subsystem:        subsystem,
+		namespace:        flattenKey(namespace),
+		subsystem:        flattenKey(subsystem),
 		registry:         r,
 		promRegistry:     promRegistry,
 		flushInterval:    flushInterval,
@@ -45,12 +52,8 @@ func (c *PrometheusConfig) WithTimerBuckets(b []float64) *PrometheusConfig {
 	return c
 }
 
-func (c *PrometheusConfig) flattenKey(key string) string {
-	key = strings.Replace(key, " ", "_", -1)
-	key = strings.Replace(key, ".", "_", -1)
-	key = strings.Replace(key, "-", "_", -1)
-	key = strings.Replace(key, "=", "_", -1)
-	return key
+func (c *PrometheusConfig) WithMetricsWhitelist(metricsWhitelist map[string]bool) {
+	c.metricsWhitelist = metricsWhitelist
 }
 
 func (c *PrometheusConfig) createKey(name string) string {
@@ -62,9 +65,9 @@ func (c *PrometheusConfig) gaugeFromNameAndValue(name string, val float64) {
 	g, ok := c.gauges[key]
 	if !ok {
 		g = prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: c.flattenKey(c.namespace),
-			Subsystem: c.flattenKey(c.subsystem),
-			Name:      c.flattenKey(name),
+			Namespace: c.namespace,
+			Subsystem: c.subsystem,
+			Name:      flattenKey(name),
 			Help:      name,
 		})
 		c.promRegistry.Register(g)
@@ -113,9 +116,9 @@ func (c *PrometheusConfig) histogramFromNameAndMetric(name string, goMetric inte
 
 	desc := prometheus.NewDesc(
 		prometheus.BuildFQName(
-			c.flattenKey(c.namespace),
-			c.flattenKey(c.subsystem),
-			fmt.Sprintf("%s_%s", c.flattenKey(name), typeName),
+			flattenKey(c.namespace),
+			flattenKey(c.subsystem),
+			fmt.Sprintf("%s_%s", flattenKey(name), typeName),
 		),
 		name,
 		[]string{},
@@ -142,6 +145,12 @@ func (c *PrometheusConfig) UpdatePrometheusMetrics() {
 
 func (c *PrometheusConfig) UpdatePrometheusMetricsOnce() error {
 	c.registry.Each(func(name string, i interface{}) {
+		if c.metricsWhitelist != nil {
+			if _, found := c.metricsWhitelist[name]; !found {
+				return
+			}
+		}
+
 		switch metric := i.(type) {
 		case metrics.Counter:
 			c.gaugeFromNameAndValue(name, float64(metric.Count()))
@@ -155,7 +164,6 @@ func (c *PrometheusConfig) UpdatePrometheusMetricsOnce() error {
 				lastSample := samples[len(samples)-1]
 				c.gaugeFromNameAndValue(name, float64(lastSample))
 			}
-
 			c.histogramFromNameAndMetric(name, metric, c.histogramBuckets)
 		case metrics.Meter:
 			lastSample := metric.Snapshot().Rate1()
@@ -163,7 +171,6 @@ func (c *PrometheusConfig) UpdatePrometheusMetricsOnce() error {
 		case metrics.Timer:
 			lastSample := metric.Snapshot().Rate1()
 			c.gaugeFromNameAndValue(name, float64(lastSample))
-
 			c.histogramFromNameAndMetric(name, metric, c.timerBuckets)
 		}
 	})
@@ -183,4 +190,10 @@ func (c *CustomCollector) Collect(ch chan<- prometheus.Metric) {
 
 func (p *CustomCollector) Describe(ch chan<- *prometheus.Desc) {
 	// Empty method to fulfill prometheus.Collector interface.
+}
+
+var onlyAlphaNumChars = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+func flattenKey(name string) string {
+	return strings.Trim(onlyAlphaNumChars.ReplaceAllString(strings.ToLower(name), "_"), "_")
 }
