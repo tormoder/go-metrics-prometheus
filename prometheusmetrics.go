@@ -14,10 +14,10 @@ import (
 
 type PrometheusConfig struct {
 	namespace        string
-	Registry         metrics.Registry // Registry to be exported
+	registry         metrics.Registry // Registry to be exported
 	subsystem        string
 	promRegistry     prometheus.Registerer //Prometheus registry
-	FlushInterval    time.Duration         //interval to update prom metrics
+	flushInterval    time.Duration         //interval to update prom metrics
 	gauges           map[string]prometheus.Gauge
 	customMetrics    map[string]*CustomCollector
 	histogramBuckets []float64
@@ -26,13 +26,13 @@ type PrometheusConfig struct {
 
 // NewPrometheusProvider returns a Provider that produces Prometheus metrics.
 // Namespace and subsystem are applied to all produced metrics.
-func NewPrometheusProvider(r metrics.Registry, namespace string, subsystem string, promRegistry prometheus.Registerer, FlushInterval time.Duration) *PrometheusConfig {
+func NewPrometheusProvider(r metrics.Registry, namespace string, subsystem string, promRegistry prometheus.Registerer, flushInterval time.Duration) *PrometheusConfig {
 	return &PrometheusConfig{
 		namespace:        namespace,
 		subsystem:        subsystem,
-		Registry:         r,
+		registry:         r,
 		promRegistry:     promRegistry,
-		FlushInterval:    FlushInterval,
+		flushInterval:    flushInterval,
 		gauges:           make(map[string]prometheus.Gauge),
 		customMetrics:    make(map[string]*CustomCollector),
 		histogramBuckets: []float64{0.05, 0.1, 0.25, 0.50, 0.75, 0.9, 0.95, 0.99},
@@ -140,13 +140,13 @@ func (c *PrometheusConfig) histogramFromNameAndMetric(name string, goMetric inte
 }
 
 func (c *PrometheusConfig) UpdatePrometheusMetrics() {
-	for _ = range time.Tick(c.FlushInterval) {
+	for _ = range time.Tick(c.flushInterval) {
 		c.UpdatePrometheusMetricsOnce()
 	}
 }
 
 func (c *PrometheusConfig) UpdatePrometheusMetricsOnce() error {
-	c.Registry.Each(func(name string, i interface{}) {
+	c.registry.Each(func(name string, i interface{}) {
 		switch metric := i.(type) {
 		case metrics.Counter:
 			c.gaugeFromNameAndValue(name, float64(metric.Count()))
