@@ -9,23 +9,18 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-// PrometheusConfig provides a container with config parameters for the
-// Prometheus Exporter
-
 type PrometheusConfig struct {
 	namespace        string
-	registry         metrics.Registry // Registry to be exported
+	registry         metrics.Registry
 	subsystem        string
-	promRegistry     prometheus.Registerer //Prometheus registry
-	flushInterval    time.Duration         //interval to update prom metrics
+	promRegistry     prometheus.Registerer
+	flushInterval    time.Duration
 	gauges           map[string]prometheus.Gauge
 	customMetrics    map[string]*CustomCollector
 	histogramBuckets []float64
 	timerBuckets     []float64
 }
 
-// NewPrometheusProvider returns a Provider that produces Prometheus metrics.
-// Namespace and subsystem are applied to all produced metrics.
 func NewPrometheusProvider(r metrics.Registry, namespace string, subsystem string, promRegistry prometheus.Registerer, flushInterval time.Duration) *PrometheusConfig {
 	return &PrometheusConfig{
 		namespace:        namespace,
@@ -187,5 +182,5 @@ func (c *CustomCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (p *CustomCollector) Describe(ch chan<- *prometheus.Desc) {
-	// empty method to fulfill prometheus.Collector interface
+	// Empty method to fulfill prometheus.Collector interface.
 }
