@@ -19,7 +19,8 @@ type PrometheusConfig struct {
 
 	flushInterval time.Duration
 
-	metricsWhitelist map[string]bool
+	metricsWhitelist        map[string]bool
+	metricsHistogramBuckets map[string][]float64
 
 	gauges        map[string]prometheus.Gauge
 	customMetrics map[string]*CustomCollector
@@ -54,6 +55,10 @@ func (c *PrometheusConfig) WithTimerBuckets(b []float64) *PrometheusConfig {
 
 func (c *PrometheusConfig) WithMetricsWhitelist(metricsWhitelist map[string]bool) {
 	c.metricsWhitelist = metricsWhitelist
+}
+
+func (c *PrometheusConfig) WithMetricsHistogramBuckets(histogramBuckets map[string][]float64) {
+	c.metricsHistogramBuckets = histogramBuckets
 }
 
 func (c *PrometheusConfig) createKey(name string) string {
@@ -164,7 +169,11 @@ func (c *PrometheusConfig) UpdatePrometheusMetricsOnce() error {
 				lastSample := samples[len(samples)-1]
 				c.gaugeFromNameAndValue(name, float64(lastSample))
 			}
-			c.histogramFromNameAndMetric(name, metric, c.histogramBuckets)
+			buckets, found := c.metricsHistogramBuckets[name]
+			if !found || buckets == nil {
+				buckets = c.histogramBuckets
+			}
+			c.histogramFromNameAndMetric(name, metric, buckets)
 		case metrics.Meter:
 			lastSample := metric.Snapshot().Rate1()
 			c.gaugeFromNameAndValue(name, float64(lastSample))
